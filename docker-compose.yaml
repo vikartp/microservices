@@ -1,0 +1,78 @@
+version: '3.8' # Docker Compose file version(Optional)
+services:
+  myRabbit:
+    image: rabbitmq:3.13-management
+    container_name: my_rabbitmq
+    ports:
+      - "5672:5672"   # RabbitMQ default port
+      - "15672:15672" # RabbitMQ management UI port
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+      RABBITMQ_DEFAULT_VHOST: my_vhost
+    volumes:
+      # - rabbitmq_data:/var/lib/rabbitmq
+      # - d:/workspace/Micro/rabbitmq_data:/var/lib/rabbitmq
+      - ./data/rabbitmq:/var/lib/rabbitmq
+  myMongo:
+    image: mongo:6.0
+    container_name: my_mongo
+    ports:
+      - "27017:27017" # MongoDB default port
+    volumes:
+      - ./data/mongo:/data/db
+  myPostgress:
+    image: postgres:15
+    container_name: my_postgres
+    ports:
+      - "5432:5432" # PostgreSQL default port
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: mydatabase
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+  myRedis:
+    image: redis:7.0
+    container_name: my_redis
+    ports:
+      - "6379:6379" # Redis default port
+    volumes:
+      - ./data/redis:/data
+  consumer:
+    build: ./consumer
+    container_name: my_consumer
+    restart: on-failure
+    depends_on:
+      - myRabbit
+      - myMongo
+    environment:
+      RABBITMQ_URI: amqp://user:password@myRabbit:5672/my_vhost
+      MONGO_URI: mongodb://myMongo:27017/mydatabase
+      EXPRESS_PORT: 8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./consumer:/app
+      - /app/node_modules
+  producer:
+    build: ./producer
+    container_name: my_producer
+    restart: on-failure
+    depends_on:
+      - myRabbit
+      - myPostgress
+    environment:
+      RABBITMQ_URI: amqp://user:password@myRabbit:5672/my_vhost
+      PG_URI: postgres://admin:adminpassword@myPostgress:5432/mydatabase
+      EXPRESS_PORT: 8081
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./producer:/app
+      - /app/node_modules
+    
+
+# volumes:
+#   rabbitmq_data:
+#     driver: local
