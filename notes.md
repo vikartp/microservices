@@ -385,6 +385,119 @@ channel.consume(queue, async (msg) => {
 - Ensures "at-least-once delivery"
 - Don't use `{ noAck: true }` in production - you'll lose messages on failures
 
+### Prefetch and Message Concurrency
+
+#### The Default Behavior
+By default, RabbitMQ doesn't wait for acknowledgments before sending more messages. It can send multiple messages to a consumer simultaneously.
+
+**What happens with time-consuming tasks:**
+```javascript
+ch1.consume(userQueue, async (msg) => {
+    const userData = JSON.parse(msg.content.toString());
+    const user = new User(userData);
+    await user.save();  // Takes 2 seconds
+    ch1.ack(msg);
+});
+```
+
+Without prefetch control:
+1. RabbitMQ sends message #1 → Consumer starts processing (2 seconds)
+2. RabbitMQ **immediately** sends message #2 (doesn't wait for ack)
+3. Consumer processes message #2 **concurrently** with #1
+4. This continues → consumer processes many messages in parallel
+
+**Problems this can cause:**
+- Overwhelming the consumer with too many concurrent operations
+- Database connection pool exhaustion
+- Memory issues
+- Order of processing not guaranteed
+- Difficult to control resource usage
+
+#### Solution: Set Prefetch Count
+
+The `prefetch()` method limits how many unacknowledged messages a consumer can have:
+
+```javascript
+await ch1.assertQueue(userQueue);
+ch1.prefetch(1);  // Only 1 unacknowledged message at a time
+
+ch1.consume(userQueue, async (msg) => {
+    const userData = JSON.parse(msg.content.toString());
+    const user = new User(userData);
+    await user.save();  // This blocks the next message
+    ch1.ack(msg);  // Only after ack, RabbitMQ sends next message
+});
+```
+
+**With `prefetch(1)` - Sequential Processing:**
+- RabbitMQ sends message #1
+- Consumer processes it
+- RabbitMQ **waits** for `ack()` before sending message #2
+- Messages processed one at a time
+- Slower throughput but controlled, predictable behavior
+
+**With `prefetch(10)` - Controlled Concurrency:**
+- RabbitMQ can send up to 10 unacknowledged messages
+- Consumer can process up to 10 messages concurrently
+- Good balance between throughput and resource control
+- Once consumer acks one, RabbitMQ sends the next
+
+**With `prefetch(0)` or no prefetch (default):**
+- Unlimited unacknowledged messages
+- Maximum concurrency (dangerous!)
+- Can overwhelm consumer
+
+#### Choosing the Right Prefetch Value
+
+```javascript
+// Sequential processing - safest, slowest
+ch1.prefetch(1);
+
+// Controlled concurrency - balanced
+ch1.prefetch(5);   // Max 5 concurrent messages
+ch1.prefetch(10);  // Max 10 concurrent messages
+
+// High throughput - for fast operations
+ch1.prefetch(100);
+
+// Unlimited - not recommended
+// Don't set prefetch or set to 0
+```
+
+**Guidelines:**
+- **Slow operations** (database writes, API calls): `prefetch(1)` to `prefetch(5)`
+- **Fast operations** (cache updates, logging): `prefetch(50)` to `prefetch(100)`
+- **Order matters**: Always use `prefetch(1)` for sequential processing
+- **Production**: Always set an explicit prefetch value
+
+#### Example: Our User Creation Handler
+
+```javascript
+// Without prefetch control (current code) - RISKY
+ch1.consume(userQueue, async (msg) => {
+    const userData = JSON.parse(msg.content.toString());
+    const user = new User(userData);
+    await user.save();
+    ch1.ack(msg);
+});
+// Problem: Could process 100s of messages concurrently!
+
+// With prefetch control - BETTER
+await ch1.assertQueue(userQueue);
+ch1.prefetch(1);  // Process one user at a time
+
+ch1.consume(userQueue, async (msg) => {
+    const userData = JSON.parse(msg.content.toString());
+    const user = new User(userData);
+    await user.save();
+    console.log('User created:', user);
+    ch1.ack(msg);  // Next message only comes after this
+});
+```
+
+**Best Practice for our use case:**
+Since we're doing database writes (MongoDB `save()`), use `prefetch(1)` or low values like `prefetch(3)` to prevent overwhelming the database with concurrent writes.
+
 ### Virtual Hosts (vhosts)
 - Isolated environments within single RabbitMQ instance
 - Like separate "tenants" with own queues, exchanges, permissions

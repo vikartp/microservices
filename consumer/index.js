@@ -45,6 +45,11 @@ const startUp = async () => {
         await ch1.assertQueue(queue);
         await ch1.assertQueue(userQueue);
         
+        // Set prefetch to control message concurrency
+        // prefetch(1) = process one message at a time (sequential)
+        // prefetch(5) = process up to 5 messages concurrently
+        ch1.prefetch(1);  // Process one user creation at a time
+        
         // Listener
         ch1.consume(queue, (msg) => {
             if (msg !== null) {
