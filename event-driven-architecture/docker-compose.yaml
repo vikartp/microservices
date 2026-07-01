@@ -1,0 +1,102 @@
+version: '3.8'
+
+# ============================================================
+# Event-Driven Architecture (RabbitMQ / Kafka) Stack
+# ============================================================
+# This is the original setup from before the microservices
+# mastery restructure. Use this to test the basic
+# Producer → RabbitMQ → Consumer message flow.
+#
+# Run from the event-driven-architecture/ directory:
+#   docker-compose up --build
+# ============================================================
+
+services:
+  # ─── Infrastructure ───
+
+  myRabbit:
+    image: rabbitmq:3.13-management
+    container_name: eda_rabbitmq
+    ports:
+      - "5672:5672"     # AMQP protocol
+      - "15672:15672"   # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+      RABBITMQ_DEFAULT_VHOST: my_vhost
+    volumes:
+      - ./data/rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  myMongo:
+    image: mongo:6.0
+    container_name: eda_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongo:/data/db
+
+  myPostgres:
+    image: postgres:15
+    container_name: eda_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: mydatabase
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+
+  myRedis:
+    image: redis:7.0
+    container_name: eda_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+
+  # ─── Application Services ───
+
+  consumer:
+    build: ./consumer
+    container_name: eda_consumer
+    restart: on-failure
+    depends_on:
+      myRabbit:
+        condition: service_healthy
+      myMongo:
+        condition: service_started
+    environment:
+      RABBITMQ_URI: amqp://user:password@myRabbit:5672/my_vhost
+      MONGO_URI: mongodb://myMongo:27017/mydatabase
+      EXPRESS_PORT: 8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./consumer:/app
+      - /app/node_modules
+
+  producer:
+    build: ./producer
+    container_name: eda_producer
+    restart: on-failure
+    depends_on:
+      myRabbit:
+        condition: service_healthy
+      myPostgres:
+        condition: service_started
+    environment:
+      RABBITMQ_URI: amqp://user:password@myRabbit:5672/my_vhost
+      PG_URI: postgres://admin:adminpassword@myPostgres:5432/mydatabase
+      EXPRESS_PORT: 8081
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./producer:/app
+      - /app/node_modules

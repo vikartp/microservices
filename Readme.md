@@ -1,187 +1,176 @@
-# Microservices Learning Repository
+# 🎯 Microservices Mastery — Learn by Building
 
-A hands-on learning project for understanding microservices architecture, event-driven systems, and containerization using Docker.
+A **practical, hands-on guide** to master three critical microservices patterns through a real e-commerce order processing system.
 
-## 🎯 Project Overview
+> **Goal:** After completing this project, you should be fully prepared for **senior developer/architect interviews** on Idempotency, Saga Pattern, and Circuit Breaker.
 
-This repository contains practical examples of microservices built with Node.js, demonstrating various architectural patterns and technologies commonly used in modern distributed systems.
+## 🏗️ What You'll Build
 
-## 🏗️ Architecture
+An e-commerce order system with **6 microservices + 4 infrastructure services** running in Docker:
 
-### Event-Driven Communication
-- **RabbitMQ** (✅ Implemented) - Message broker for asynchronous communication between services
-- **Kafka** (🔜 Planned) - Distributed event streaming platform for high-throughput scenarios
-
-### Services
-
-#### Producer Service
-- Publishes messages to RabbitMQ queues
-- Connected to PostgreSQL database
-- REST API endpoint to trigger message sending
-- Port: `8081`
-
-#### Consumer Service
-- Consumes messages from RabbitMQ queues
-- Connected to MongoDB database
-- Processes user creation tasks asynchronously
-- Port: `8080`
-
-## 🗄️ Databases
-
-The project uses multiple database types to demonstrate polyglot persistence:
-
-- **MongoDB** (Document Database) - Used by Consumer service for user data
-- **PostgreSQL** (Relational Database) - Used by Producer service
-- **Redis** (In-Memory Cache) - For caching and session management
-- **InfluxDB** (🔜 Planned) - Time-series database for metrics and monitoring
-
-## 🐳 Docker Setup
-
-All services run in Docker containers orchestrated by Docker Compose:
-
-### Services Stack
-- **RabbitMQ** (with Management UI)
-  - AMQP Port: `5672`
-  - Management UI: `15672`
-  - Credentials: `user/password`
-  - Virtual Host: `my_vhost`
-
-- **MongoDB** - Port: `27017`
-- **PostgreSQL** - Port: `5432`
-- **Redis** - Port: `6379`
-- **Producer** - Port: `8081`
-- **Consumer** - Port: `8080`
-
-### Volume Mounting
-Both producer and consumer services use volume mounting for hot-reload during development:
-```yaml
-volumes:
-  - ./producer:/app
-  - /app/node_modules
+```
+Customer → API Gateway → Order Service → Saga Orchestrator
+              (Circuit          │                │
+              Breaker)     ┌────┴────┐    ┌──────┴──────┐
+                           │ Payment │    │  Inventory  │
+                           │ Service │    │   Service   │
+                           │(Idempotent)  │(Compensating│
+                           └─────────┘    │Transactions)│
+                                          └─────────────┘
 ```
 
-This enables immediate reflection of code changes without rebuilding containers.
+| Pattern | Where | What You'll See |
+|---------|-------|-----------------|
+| **Idempotency** | Payment Service | Send the same payment 5x → only 1 charge |
+| **Saga** | Saga Orchestrator | Order fails at inventory → payment automatically refunded |
+| **Circuit Breaker** | API Gateway | Notification service goes down → instant fallback, auto-recovery |
 
-## 🚀 Getting Started
+## 🚀 Quick Start (5 Minutes)
 
 ### Prerequisites
-- Docker Desktop or Rancher Desktop(dockerd) installed
-- Docker Compose installed
+- Docker Desktop (4GB+ RAM)
+- Node.js 20+
 
-### Running the Application
+### Launch
 
-1. **Start all services:**
-   ```powershell
-   docker-compose up --build
-   ```
+```powershell
+# Start everything (10 containers)
+docker-compose up --build -d
 
-2. **Run in detached mode (background):**
-   ```powershell
-   docker-compose up --build -d
-   ```
+# Wait for health checks (~30 seconds)
+docker-compose ps
 
-3. **Rebuild specific service:**
-   ```powershell
-   docker-compose build producer
-   docker-compose up producer
-   ```
-
-4. **View logs:**
-   ```powershell
-   # All services
-   docker-compose logs -f
-   
-   # Specific service
-   docker-compose logs -f consumer
-   ```
-
-5. **Stop services:**
-   ```powershell
-   docker-compose down
-   ```
-
-6. **Stop and remove volumes:**
-   ```powershell
-   docker-compose down -v
-   ```
-
-## 📡 API Endpoints
-
-### Producer Service (Port 8081)
-- `GET /` - Send a default message to the queue
-- `GET /send?msg=your_message` - Send a custom message to the queue
-- `POST /user` - Create a user (sends user data to user_tasks queue)
-  ```json
-  {
-    "name": "John Doe",
-    "email": "john@example.com",
-    "password": "secret123"
-  }
-  ```
-
-### Consumer Service (Port 8080)
-- `GET /` - Health check endpoint
-
-## 🔄 Message Flow
-
-1. Producer service receives HTTP request
-2. Producer publishes message to RabbitMQ queue
-3. RabbitMQ stores message until consumed
-4. Consumer service listens to the queue
-5. Consumer processes message and stores data in MongoDB
-6. Consumer acknowledges message to RabbitMQ
-
-## 🛠️ Development Features
-
-### Hot Reload with Nodemon
-Both services use nodemon with legacy watch mode for Docker compatibility:
-```json
-"start": "nodemon -L index.js"
+# Seed inventory data
+npm install mongoose --prefix scripts
+node scripts/seed-data.js
 ```
 
-### Connection Retry Logic
-Services implement retry logic with exponential backoff (10 retries, 3-second delay) to handle startup dependencies gracefully.
+### Run the Demos
 
-### Restart Policy
-Containers automatically restart on failure:
-```yaml
-restart: on-failure
+```powershell
+node scripts/test-idempotency.js      # Watch duplicate prevention
+node scripts/test-saga.js             # Watch saga + compensation
+node scripts/test-circuit-breaker.js  # Watch circuit open/close
 ```
 
-## 📚 Learning Topics Covered
+### Explore
 
-- Microservices architecture
-- Event-driven communication
-- Message queuing with RabbitMQ
-- Docker containerization
-- Docker Compose orchestration
-- Polyglot persistence
-- Connection resilience and retry patterns
-- Hot reload in containerized environments
-- Volume mounting for development
-- Environment variable management
+| URL | What |
+|-----|------|
+| http://localhost:3000 | API Gateway (lists all endpoints) |
+| http://localhost:15672 | RabbitMQ Management UI (user/password) |
+| http://localhost:3000/api/circuit-status | Circuit breaker dashboard |
 
-## 🔜 Future Enhancements
+## 📚 Learning Path
 
-- [ ] Kafka integration for event streaming
-- [ ] InfluxDB for time-series data and metrics
-- [ ] API Gateway
-- [ ] Service discovery
-- [ ] Load balancing
-- [ ] Distributed tracing
-- [ ] Monitoring and observability
-- [ ] Authentication and authorization
-- [ ] Circuit breaker pattern
-- [ ] CQRS pattern implementation
+| # | Guide | Time | Difficulty |
+|---|-------|------|------------|
+| 0 | [Architecture Overview](docs/00-overview.md) | 10 min | ⭐ |
+| 1 | [Idempotency Deep Dive](docs/01-idempotency.md) | 30 min | ⭐⭐ |
+| 2 | [Saga Pattern Deep Dive](docs/02-saga-pattern.md) | 45 min | ⭐⭐⭐ |
+| 3 | [Circuit Breaker Deep Dive](docs/03-circuit-breaker.md) | 30 min | ⭐⭐ |
+| 4 | [Hands-On Exercises](docs/04-exercises.md) | 60 min | ⭐⭐⭐ |
+| 5 | [Interview Questions (50+)](docs/05-interview-questions.md) | 90 min | ⭐⭐⭐⭐ |
 
-## 📝 Notes
+Each guide includes:
+- ✅ Theory with clear analogies
+- ✅ Step-by-step code walkthrough
+- ✅ ASCII diagrams for visual learners
+- ✅ Edge cases and gotchas
+- ✅ How big companies do it (Stripe, Netflix, AWS)
+- ✅ Interview Q&A with model answers
 
-For detailed learning notes, Docker commands, and explanations, see [notes.md](./notes.md).
+## 🐳 Services
 
-## 🤝 Contributing
+| Service | Port | Tech | Pattern |
+|---------|------|------|---------|
+| API Gateway | 3000 | Express + opossum | Circuit Breaker |
+| Order Service | 3001 | Express + Sequelize + PostgreSQL | Saga Initiator |
+| Payment Service | 3002 | Express + Sequelize + Redis | Idempotency |
+| Inventory Service | 3003 | Express + Mongoose + MongoDB | Compensating Transactions |
+| Notification Service | 3004 | Express | Chaos/Fault Injection |
+| Saga Orchestrator | — | RabbitMQ + Redis | Saga State Machine |
 
-This is a learning repository. Feel free to experiment, break things, and learn!
+### Infrastructure
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| RabbitMQ | 5672 / 15672 | Event bus (saga events) |
+| PostgreSQL | 5432 | Orders + payments |
+| MongoDB | 27017 | Inventory |
+| Redis | 6379 | Idempotency keys + saga state |
+
+## 📡 API Reference
+
+### Orders (via API Gateway)
+```
+POST   /api/orders          Create order (starts saga)
+GET    /api/orders           List all orders
+GET    /api/orders/:id       Get order status
+```
+
+### Payments
+```
+POST   /api/payments         Process payment (use Idempotency-Key header!)
+```
+
+### Inventory
+```
+GET    /api/inventory        List products
+GET    /api/inventory/:id    Check stock
+```
+
+### Notifications (Circuit Breaker Demo)
+```
+POST   /api/notify           Send notification (may fail!)
+```
+
+### Monitoring
+```
+GET    /api/circuit-status   All circuit breaker states
+GET    /api/health           Gateway health
+```
+
+### Chaos Control
+```
+POST   /api/chaos/enable     Enable failures on notification service
+POST   /api/chaos/disable    Disable failures
+POST   /api/chaos/config     Configure failure rate & latency
+```
+
+## 🔧 Development
+
+### Watch Logs (Best Way to Learn)
+```powershell
+# All services
+docker-compose logs -f
+
+# Saga flow
+docker-compose logs -f saga-orchestrator order-service payment-service inventory-service
+
+# Circuit breaker
+docker-compose logs -f api-gateway notification-service
+```
+
+### Hot Reload
+All services use nodemon with volume mounts. Edit any `src/*.js` file → changes apply automatically.
+
+### Rebuild After Dependency Changes
+```powershell
+docker-compose build payment-service
+docker-compose up payment-service
+```
+
+### Clean Restart
+```powershell
+docker-compose down -v    # Stop + remove data
+docker-compose up --build  # Fresh start
+```
+
+## 📝 Event-Driven Architecture (Kafka / RabbitMQ)
+
+The original producer/consumer code from our earlier learning is preserved in [`event-driven-architecture/`](event-driven-architecture/). The original notes are in [`event-driven-architecture/notes.md`](event-driven-architecture/notes.md). This section will also serve as a foundation for future Kafka examples.
 
 ## 📄 License
 
-MIT License - Feel free to use this for learning purposes.
+MIT — Built for learning. Break things. Experiment. Master it.

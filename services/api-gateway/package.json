@@ -1,0 +1,17 @@
+{
+  "name": "api-gateway",
+  "version": "1.0.0",
+  "description": "API Gateway with circuit breaker pattern",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "nodemon -L src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "opossum": "^8.1.4",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  }
+}

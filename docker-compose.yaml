@@ -1,78 +1,202 @@
-version: '3.8' # Docker Compose file version(Optional)
+version: '3.8'
+
 services:
-  myRabbit:
+  # ============================================================
+  # INFRASTRUCTURE SERVICES
+  # ============================================================
+
+  rabbitmq:
     image: rabbitmq:3.13-management
-    container_name: my_rabbitmq
+    container_name: ms_rabbitmq
     ports:
-      - "5672:5672"   # RabbitMQ default port
-      - "15672:15672" # RabbitMQ management UI port
+      - "5672:5672"     # AMQP protocol
+      - "15672:15672"   # Management UI
     environment:
       RABBITMQ_DEFAULT_USER: user
       RABBITMQ_DEFAULT_PASS: password
       RABBITMQ_DEFAULT_VHOST: my_vhost
     volumes:
-      # - rabbitmq_data:/var/lib/rabbitmq
-      # - d:/workspace/Micro/rabbitmq_data:/var/lib/rabbitmq
       - ./data/rabbitmq:/var/lib/rabbitmq
-  myMongo:
-    image: mongo:6.0
-    container_name: my_mongo
-    ports:
-      - "27017:27017" # MongoDB default port
-    volumes:
-      - ./data/mongo:/data/db
-  myPostgress:
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  postgres:
     image: postgres:15
-    container_name: my_postgres
+    container_name: ms_postgres
     ports:
-      - "5432:5432" # PostgreSQL default port
+      - "5432:5432"
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: adminpassword
-      POSTGRES_DB: mydatabase
+      POSTGRES_DB: microservices_db
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
-  myRedis:
-    image: redis:7.0
-    container_name: my_redis
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d microservices_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mongodb:
+    image: mongo:6.0
+    container_name: ms_mongodb
     ports:
-      - "6379:6379" # Redis default port
+      - "27017:27017"
+    volumes:
+      - ./data/mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7.0
+    container_name: ms_redis
+    ports:
+      - "6379:6379"
     volumes:
       - ./data/redis:/data
-  consumer:
-    build: ./consumer
-    container_name: my_consumer
-    restart: on-failure
-    depends_on:
-      - myRabbit
-      - myMongo
-    environment:
-      RABBITMQ_URI: amqp://user:password@myRabbit:5672/my_vhost
-      MONGO_URI: mongodb://myMongo:27017/mydatabase
-      EXPRESS_PORT: 8080
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./consumer:/app
-      - /app/node_modules
-  producer:
-    build: ./producer
-    container_name: my_producer
-    restart: on-failure
-    depends_on:
-      - myRabbit
-      - myPostgress
-    environment:
-      RABBITMQ_URI: amqp://user:password@myRabbit:5672/my_vhost
-      PG_URI: postgres://admin:adminpassword@myPostgress:5432/mydatabase
-      EXPRESS_PORT: 8081
-    ports:
-      - "8081:8081"
-    volumes:
-      - ./producer:/app
-      - /app/node_modules
-    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-# volumes:
-#   rabbitmq_data:
-#     driver: local
+  # ============================================================
+  # APPLICATION SERVICES
+  # ============================================================
+
+  # API Gateway — Entry point, circuit breaker
+  api-gateway:
+    build: ./services/api-gateway
+    container_name: ms_api_gateway
+    restart: on-failure
+    ports:
+      - "3000:3000"
+    environment:
+      API_GATEWAY_PORT: 3000
+      ORDER_SERVICE_URL: http://order-service:3001
+      PAYMENT_SERVICE_URL: http://payment-service:3002
+      INVENTORY_SERVICE_URL: http://inventory-service:3003
+      NOTIFICATION_SERVICE_URL: http://notification-service:3004
+      CB_TIMEOUT: 5000
+      CB_ERROR_THRESHOLD: 50
+      CB_RESET_TIMEOUT: 15000
+    volumes:
+      - ./services/api-gateway:/app
+      - /app/node_modules
+      - ./shared:/app/../shared
+    depends_on:
+      - order-service
+      - payment-service
+      - inventory-service
+      - notification-service
+
+  # Order Service — Creates orders, initiates saga
+  order-service:
+    build: ./services/order-service
+    container_name: ms_order_service
+    restart: on-failure
+    ports:
+      - "3001:3001"
+    environment:
+      ORDER_SERVICE_PORT: 3001
+      RABBITMQ_URI: amqp://user:password@rabbitmq:5672/my_vhost
+      PG_URI: postgres://admin:adminpassword@postgres:5432/microservices_db
+    volumes:
+      - ./services/order-service:/app
+      - /app/node_modules
+      - ./shared:/app/../shared
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  # Payment Service — Idempotency pattern
+  payment-service:
+    build: ./services/payment-service
+    container_name: ms_payment_service
+    restart: on-failure
+    ports:
+      - "3002:3002"
+    environment:
+      PAYMENT_SERVICE_PORT: 3002
+      RABBITMQ_URI: amqp://user:password@rabbitmq:5672/my_vhost
+      PG_URI: postgres://admin:adminpassword@postgres:5432/microservices_db
+      REDIS_URI: redis://redis:6379
+    volumes:
+      - ./services/payment-service:/app
+      - /app/node_modules
+      - ./shared:/app/../shared
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Inventory Service — Compensating transactions
+  inventory-service:
+    build: ./services/inventory-service
+    container_name: ms_inventory_service
+    restart: on-failure
+    ports:
+      - "3003:3003"
+    environment:
+      INVENTORY_SERVICE_PORT: 3003
+      RABBITMQ_URI: amqp://user:password@rabbitmq:5672/my_vhost
+      MONGO_URI: mongodb://mongodb:27017/inventory_db
+    volumes:
+      - ./services/inventory-service:/app
+      - /app/node_modules
+      - ./shared:/app/../shared
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
+  # Notification Service — Deliberately flaky for circuit breaker demo
+  notification-service:
+    build: ./services/notification-service
+    container_name: ms_notification_service
+    restart: on-failure
+    ports:
+      - "3004:3004"
+    environment:
+      NOTIFICATION_SERVICE_PORT: 3004
+      RABBITMQ_URI: amqp://user:password@rabbitmq:5672/my_vhost
+      FAILURE_RATE: "0.5"
+      LATENCY_MAX_MS: "3000"
+    volumes:
+      - ./services/notification-service:/app
+      - /app/node_modules
+      - ./shared:/app/../shared
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  # Saga Orchestrator — Saga state machine
+  saga-orchestrator:
+    build: ./services/saga-orchestrator
+    container_name: ms_saga_orchestrator
+    restart: on-failure
+    environment:
+      RABBITMQ_URI: amqp://user:password@rabbitmq:5672/my_vhost
+      REDIS_URI: redis://redis:6379
+    volumes:
+      - ./services/saga-orchestrator:/app
+      - /app/node_modules
+      - ./shared:/app/../shared
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
