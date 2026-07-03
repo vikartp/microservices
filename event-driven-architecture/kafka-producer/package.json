@@ -1,0 +1,16 @@
+{
+  "name": "kafka-producer",
+  "version": "1.0.0",
+  "description": "Telemetry data producer — sends mock device data to Kafka partitions",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon -L index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "kafkajs": "^2.2.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  }
+}

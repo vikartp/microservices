@@ -1,25 +1,27 @@
 version: '3.8'
 
 # ============================================================
-# Event-Driven Architecture (RabbitMQ / Kafka) Stack
+# Event-Driven Architecture Stack
 # ============================================================
-# This is the original setup from before the microservices
-# mastery restructure. Use this to test the basic
-# Producer → RabbitMQ → Consumer message flow.
+# RabbitMQ:  Producer → RabbitMQ → Consumer (original example)
+# Kafka:    Telemetry Producer → Kafka → InfluxDB / TimescaleDB
 #
 # Run from the event-driven-architecture/ directory:
 #   docker-compose up --build
 # ============================================================
 
 services:
-  # ─── Infrastructure ───
+
+  # ══════════════════════════════════════════════════════════════
+  # INFRASTRUCTURE — Messaging
+  # ══════════════════════════════════════════════════════════════
 
   myRabbit:
     image: rabbitmq:3.13-management
     container_name: eda_rabbitmq
     ports:
-      - "5672:5672"     # AMQP protocol
-      - "15672:15672"   # Management UI
+      - "5672:5672"
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: user
       RABBITMQ_DEFAULT_PASS: password
@@ -32,6 +34,55 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # Kafka in KRaft mode (no Zookeeper needed!)
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: eda_kafka
+    ports:
+      - "9092:9092"     # External client access
+      - "9094:9094"     # Controller port
+    environment:
+      # KRaft mode — no Zookeeper
+      KAFKA_CFG_NODE_ID: 1
+      KAFKA_CFG_PROCESS_ROLES: broker,controller
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9094
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Listeners
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9094
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Auto-create topics
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Log retention
+      KAFKA_CFG_LOG_RETENTION_HOURS: 24
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    volumes:
+      - ./data/kafka:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Kafka UI — visualize topics, partitions, messages
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: eda_kafka_ui
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ══════════════════════════════════════════════════════════════
+  # INFRASTRUCTURE — Databases
+  # ══════════════════════════════════════════════════════════════
 
   myMongo:
     image: mongo:6.0
@@ -61,7 +112,48 @@ services:
     volumes:
       - ./data/redis:/data
 
-  # ─── Application Services ───
+  # InfluxDB — Time-series database (for partition 0)
+  influxdb:
+    image: influxdb:2.7
+    container_name: eda_influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: adminpassword
+      DOCKER_INFLUXDB_INIT_ORG: myorg
+      DOCKER_INFLUXDB_INIT_BUCKET: telemetry
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: my-super-secret-token
+    volumes:
+      - ./data/influxdb:/var/lib/influxdb2
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TimescaleDB — PostgreSQL extension for time-series (for partition 1)
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: eda_timescaledb
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: telemetry
+    volumes:
+      - ./data/timescaledb:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d telemetry"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ══════════════════════════════════════════════════════════════
+  # APPLICATION — RabbitMQ (Original Examples)
+  # ══════════════════════════════════════════════════════════════
 
   consumer:
     build: ./consumer
@@ -99,4 +191,77 @@ services:
       - "8081:8081"
     volumes:
       - ./producer:/app
+      - /app/node_modules
+
+  # ══════════════════════════════════════════════════════════════
+  # APPLICATION — Kafka (Time-Series Telemetry Demo)
+  # ══════════════════════════════════════════════════════════════
+
+  # Produces mock telemetry data to Kafka topic "telemetry"
+  # Partition 0 → device temperature data (for InfluxDB)
+  # Partition 1 → device metrics data (for TimescaleDB)
+  kafka-producer:
+    build: ./kafka-producer
+    container_name: eda_kafka_producer
+    restart: on-failure
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      TOPIC: telemetry
+      INTERVAL_MS: 1000
+      BATCH_SIZE: 50
+      EXPRESS_PORT: 8082
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./kafka-producer:/app
+      - /app/node_modules
+
+  # Consumes from partition 0 → writes to InfluxDB
+  kafka-consumer-influx:
+    build: ./kafka-consumer-influx
+    container_name: eda_kafka_consumer_influx
+    restart: on-failure
+    depends_on:
+      kafka:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      TOPIC: telemetry
+      PARTITION: 0
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: my-super-secret-token
+      INFLUX_ORG: myorg
+      INFLUX_BUCKET: telemetry
+      EXPRESS_PORT: 8083
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./kafka-consumer-influx:/app
+      - /app/node_modules
+
+  # Consumes from partition 1 → writes to TimescaleDB
+  kafka-consumer-timescale:
+    build: ./kafka-consumer-timescale
+    container_name: eda_kafka_consumer_timescale
+    restart: on-failure
+    depends_on:
+      kafka:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      TOPIC: telemetry
+      PARTITION: 1
+      TIMESCALE_URI: postgres://admin:adminpassword@timescaledb:5432/telemetry
+      EXPRESS_PORT: 8084
+    ports:
+      - "8084:8084"
+    volumes:
+      - ./kafka-consumer-timescale:/app
       - /app/node_modules
