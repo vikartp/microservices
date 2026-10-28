@@ -15,9 +15,9 @@
  */
 
 const Redis = require('ioredis');
-const { connectWithRetry } = require('../../../shared/retry');
-const { connectRabbitMQ, publishEvent, consumeEvents } = require('../../../shared/rabbitmq');
-const { createLogger } = require('../../../shared/logger');
+const { connectWithRetry } = require('../../../../shared-libraries/retry');
+const { connectRabbitMQ, publishEvent, consumeEvents } = require('../../../../shared-libraries/rabbitmq');
+const { createLogger } = require('../../../../shared-libraries/logger');
 const { SagaEngine } = require('./saga-engine');
 const { orderSagaSteps } = require('./sagas/order-saga');
 

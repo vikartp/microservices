@@ -63,7 +63,7 @@
  */
 
 const CircuitBreaker = require('opossum');
-const { createLogger } = require('../../../shared/logger');
+const { createLogger } = require('../../../../shared-libraries/logger');
 
 const logger = createLogger('CircuitBreaker');
 

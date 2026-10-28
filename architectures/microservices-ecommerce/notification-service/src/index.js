@@ -26,9 +26,9 @@
  */
 
 const express = require('express');
-const { connectWithRetry } = require('../../../shared/retry');
-const { connectRabbitMQ, publishEvent, consumeEvents } = require('../../../shared/rabbitmq');
-const { createLogger } = require('../../../shared/logger');
+const { connectWithRetry } = require('../../../../shared-libraries/retry');
+const { connectRabbitMQ, publishEvent, consumeEvents } = require('../../../../shared-libraries/rabbitmq');
+const { createLogger } = require('../../../../shared-libraries/logger');
 
 const app = express();
 app.use(express.json());

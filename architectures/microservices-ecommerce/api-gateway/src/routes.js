@@ -8,7 +8,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { createCircuitBreaker, getCircuitStatus, makeHttpRequest } = require('./circuit-breaker');
-const { createLogger } = require('../../../shared/logger');
+const { createLogger } = require('../../../../shared-libraries/logger');
 
 const logger = createLogger('APIGateway');
 

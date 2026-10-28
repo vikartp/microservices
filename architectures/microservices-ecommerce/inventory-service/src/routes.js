@@ -7,7 +7,7 @@
  */
 
 const express = require('express');
-const { createLogger } = require('../../../shared/logger');
+const { createLogger } = require('../../../../shared-libraries/logger');
 const { Product } = require('./models/product');
 
 const logger = createLogger('InventoryRoutes');

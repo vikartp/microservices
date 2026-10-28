@@ -7,7 +7,7 @@
 
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { createLogger } = require('../../../shared/logger');
+const { createLogger } = require('../../../../shared-libraries/logger');
 
 const logger = createLogger('OrderRoutes');
 

@@ -11,7 +11,7 @@
 
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { createLogger } = require('../../../shared/logger');
+const { createLogger } = require('../../../../shared-libraries/logger');
 const { createIdempotencyMiddleware } = require('./idempotency');
 
 const logger = createLogger('PaymentRoutes');

@@ -73,7 +73,7 @@ services:
 
   # API Gateway — Entry point, circuit breaker
   api-gateway:
-    build: ./services/api-gateway
+    build: ./api-gateway
     container_name: ms_api_gateway
     restart: on-failure
     ports:
@@ -88,9 +88,9 @@ services:
       CB_ERROR_THRESHOLD: 50
       CB_RESET_TIMEOUT: 15000
     volumes:
-      - ./services/api-gateway:/app
+      - ./api-gateway:/app
       - /app/node_modules
-      - ./shared:/app/../shared
+      - ../../shared-libraries:/app/../shared-libraries
     depends_on:
       - order-service
       - payment-service
@@ -99,7 +99,7 @@ services:
 
   # Order Service — Creates orders, initiates saga
   order-service:
-    build: ./services/order-service
+    build: ./order-service
     container_name: ms_order_service
     restart: on-failure
     ports:
@@ -109,9 +109,9 @@ services:
       RABBITMQ_URI: amqp://user:password@rabbitmq:5672/my_vhost
       PG_URI: postgres://admin:adminpassword@postgres:5432/microservices_db
     volumes:
-      - ./services/order-service:/app
+      - ./order-service:/app
       - /app/node_modules
-      - ./shared:/app/../shared
+      - ../../shared-libraries:/app/../shared-libraries
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -120,7 +120,7 @@ services:
 
   # Payment Service — Idempotency pattern
   payment-service:
-    build: ./services/payment-service
+    build: ./payment-service
     container_name: ms_payment_service
     restart: on-failure
     ports:
@@ -131,9 +131,9 @@ services:
       PG_URI: postgres://admin:adminpassword@postgres:5432/microservices_db
       REDIS_URI: redis://redis:6379
     volumes:
-      - ./services/payment-service:/app
+      - ./payment-service:/app
       - /app/node_modules
-      - ./shared:/app/../shared
+      - ../../shared-libraries:/app/../shared-libraries
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -144,7 +144,7 @@ services:
 
   # Inventory Service — Compensating transactions
   inventory-service:
-    build: ./services/inventory-service
+    build: ./inventory-service
     container_name: ms_inventory_service
     restart: on-failure
     ports:
@@ -154,9 +154,9 @@ services:
       RABBITMQ_URI: amqp://user:password@rabbitmq:5672/my_vhost
       MONGO_URI: mongodb://mongodb:27017/inventory_db
     volumes:
-      - ./services/inventory-service:/app
+      - ./inventory-service:/app
       - /app/node_modules
-      - ./shared:/app/../shared
+      - ../../shared-libraries:/app/../shared-libraries
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -165,7 +165,7 @@ services:
 
   # Notification Service — Deliberately flaky for circuit breaker demo
   notification-service:
-    build: ./services/notification-service
+    build: ./notification-service
     container_name: ms_notification_service
     restart: on-failure
     ports:
@@ -176,25 +176,25 @@ services:
       FAILURE_RATE: "0.5"
       LATENCY_MAX_MS: "3000"
     volumes:
-      - ./services/notification-service:/app
+      - ./notification-service:/app
       - /app/node_modules
-      - ./shared:/app/../shared
+      - ../../shared-libraries:/app/../shared-libraries
     depends_on:
       rabbitmq:
         condition: service_healthy
 
   # Saga Orchestrator — Saga state machine
   saga-orchestrator:
-    build: ./services/saga-orchestrator
+    build: ./saga-orchestrator
     container_name: ms_saga_orchestrator
     restart: on-failure
     environment:
       RABBITMQ_URI: amqp://user:password@rabbitmq:5672/my_vhost
       REDIS_URI: redis://redis:6379
     volumes:
-      - ./services/saga-orchestrator:/app
+      - ./saga-orchestrator:/app
       - /app/node_modules
-      - ./shared:/app/../shared
+      - ../../shared-libraries:/app/../shared-libraries
     depends_on:
       rabbitmq:
         condition: service_healthy

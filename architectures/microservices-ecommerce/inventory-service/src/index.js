@@ -13,9 +13,9 @@
 
 const express = require('express');
 const mongoose = require('mongoose');
-const { connectWithRetry } = require('../../../shared/retry');
-const { connectRabbitMQ, publishEvent, consumeEvents } = require('../../../shared/rabbitmq');
-const { createLogger } = require('../../../shared/logger');
+const { connectWithRetry } = require('../../../../shared-libraries/retry');
+const { connectRabbitMQ, publishEvent, consumeEvents } = require('../../../../shared-libraries/rabbitmq');
+const { createLogger } = require('../../../../shared-libraries/logger');
 const { Product } = require('./models/product');
 const { createInventoryRoutes } = require('./routes');
 

@@ -15,9 +15,9 @@
 
 const express = require('express');
 const { Sequelize } = require('sequelize');
-const { connectWithRetry } = require('../../../shared/retry');
-const { connectRabbitMQ, publishEvent, consumeEvents } = require('../../../shared/rabbitmq');
-const { createLogger } = require('../../../shared/logger');
+const { connectWithRetry } = require('../../../../shared-libraries/retry');
+const { connectRabbitMQ, publishEvent, consumeEvents } = require('../../../../shared-libraries/rabbitmq');
+const { createLogger } = require('../../../../shared-libraries/logger');
 const { defineOrderModel } = require('./models/order');
 const { createOrderRoutes } = require('./routes');
 

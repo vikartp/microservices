@@ -18,7 +18,7 @@
  */
 
 const express = require('express');
-const { createLogger } = require('../../../shared/logger');
+const { createLogger } = require('../../../../shared-libraries/logger');
 const { createGatewayRoutes } = require('./routes');
 
 const app = express();

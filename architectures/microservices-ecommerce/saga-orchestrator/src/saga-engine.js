@@ -49,7 +49,7 @@
  * ============================================================
  */
 
-const { createLogger } = require('../../../shared/logger');
+const { createLogger } = require('../../../../shared-libraries/logger');
 const logger = createLogger('SagaEngine');
 
 class SagaEngine {
